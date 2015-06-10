@@ -1,0 +1,375 @@
+
+LINK STATE 
+FLOODING PROJECT
+BY SHORTEST 
+PATH PROJECT
+
+
+OBJECTIVE:
+   
+                    Implementing my version of shortest path Link-state protocol implementation using UDP  socket programming for mutliple nodes.  The project has been coded in C language and executed on a  Linux machine. 
+This is just basic implemention of the project. 
+
+Improvements
+============
+a) This is just a simple implementation of the project. Because of time constraint, Code can be optimized instead of using arrays, We can dynamically allocate memory for the packets.
+   We could also the sequence number as a timer set it as 60secs and send the heart beat message (1/3) for every 20 secs to get to know
+   if the node is alive or not.
+   
+b) Instead of creating child process, we can create child thread to service other nodes.
+By that we can improve in space complexity.
+
+c) Thought of adding code for sending HEART BEAT messages to all the neighbours, if any nodes gets down we can update our routing table and notify that to other nodes that particular node is DEAD.
+
+d) By HEART BEAT message we also have the advantage by this we can add nodes in real time, if any nodes discovers new nodes by a HEART BEAT message, we can update our routing table. May be I will add this code in the holidays!!
+
+   I will soon upload the code with this improvements
+   
+
+
+
+
+1) PACKET STRUCTURE:
+==================
+struct node
+
+{
+unsigned int Node_id; // This is to Identify destination node number for which Packet belongs //
+
+unsigned int Base_node;
+ // This is to identify from where the packet came from 
+unsigned int Age; //if this node is new //
+
+unsigned int Seq_num; // Assume the largest number is 1000. Seq to identify latest mesg //
+
+int Node_Alive; //-1 means this node is dead!! //
+
+unsigned int Cost;
+
+char ip_addr[32];  // IPv4 address
+
+unsigned short int Port_no;
+
+int Directly_conneted; // -1 not directly connected, 1 -> directly connected, 0-> same node //
+
+};
+
+
+
+Explaining below each and every structure member
+
+Node_id - > This is to Identify destination node number for which Packet belongs
+
+Base_node → To identify where the packet came from. So we get an idea from where the packet came
+                        from and subsequently calculate Cost.
+
+Age → for each node we traverse we decrement the age. (for example if node 2 sends a packet we decrement the age for Packet[2].Age and send it to the destination.
+
+Seq_num → for each node we traverse, we increment the Seq_num. (for example if node 2 sends a packet we increment the  Packet[2].Seq_num and send it to the destination.
+
+Node_alive → To identify whether the node is Alive or not.
+
+Cost → Link Cost 
+
+Ip_addr - > Ip_address of the node.
+
+Port no → Port no of the node.
+
+Directly_conneted → -1 not directly connected, 1 -> directly connected, 0-> same node.
+====================================================================
+
+
+
+2)  PROJECT DESIGN (NODE 1 Perspective)
+=================================
+
+This is basic algorithm Logic (Not an algorithm but Main Logic behind my program)
+
+This program can executed for Maximum 50 Nodes. If you want to run for more than 50. You can just change the macro,  if You want to increase the number of Nodes.
+
+#define NODE_CAPACITY   50 
+
+Main Fun() 
+{
+
+Get the Command line input (Argv[1] → Ip address, Argv[2] → Portno of the Node );
+ 
+   for(i = 0; i < NODE_CAPACITY; i++) {
+
+        memset(&Packet[i], 0, sizeof(Packet[i]));
+
+        Packet[i].Node_Alive = -1;
+
+        Packet[i].Node_id = i;
+
+        Packet[i].Base_node = -1;
+
+        Packet[i].Directly_conneted = -1;
+
+        Packet[i].Seq_num = (2^30); //Kinda of Infinity
+ //COST ASSIGN MAX VALUE (4 BYTES)
+        Packet[i].Age = 1;
+
+        Packet[i].Cost = (2^30); //kinda of Infinity
+ //COST ASSIGN MA VALUE (4 BYTES)
+        strcpy(Packet[i].ip_addr, "NOT CONNECTED");
+
+        Packet[i].Port_no = -1;
+
+    }
+
+Get the input from the user for all the nodes (INTIAL TOPOLOGY).
+
+
+1) Create Child Process ;
+          → send the valid packets to all the neighbours.
+
+
+                        while (j < direct_nodes) {
+
+                                /* Send the Packet info to directly connected nodes */
+
+                                k = Direct_arr[j];
+
+                                Packet[k].Age = Packet[i].Age;
+
+                                Packet[k].Seq_num = Packet[i].Seq_num;
+
+                                if (k != i) {
+
+                                    sendto(cli_fd, (struct node *)&Packet[k], sizeof(Packet[k]), 0,
+
+                                            (struct sockaddr *)&Cli_addr, sizeof(Cli_addr));
+
+                                }
+
+                                ++j;
+
+                        }
+
+End of Child process
+
+
+While (1) { //Infinite LOOP
+
+2) PARENT PROCESS: 
+ 
+recvfrom(sock_fd, (struct node *)&temp, sizeof(temp), 0, NULL, NULL);  //Non Blocking Call so it service any packet!!!!
+
+Get the valid packet
+   → identify from where it came from  ( Base_node)
+    → identify to which packet it belongs  (Node_id)
+
+
+Now validate the packet and perform all the checks like seqnumber , Age, Cost as shown below.
+
+       1) → If the destination packet is node 1, it will go to first IF condition
+        2) → If the destination is another node, it will go to secound IF condition 
+        3))  > if it fails all the checks (i.e. INVALID packet) then do nothing.
+
+     We will flood the packet only for 2nd if condition (VALID packet) by setting the flag to 1. Otherwise we wont!!
+
+      if ((temp.Seq_num <= Packet[temp.Base_node].Seq_num)   &&
+
+          (temp.Age     >= Packet[temp.Base_node].Age)       &&
+
+          (temp.Base_node != id)                              &&
+
+          (temp.Cost     != 0)                                &&
+
+          (temp.Node_Alive != -1) ) {
+
+          if ( (temp.Node_id == id) &&
+
+               (temp.Cost    <= Packet[temp.Base_node].Cost) )  {
+
+              Packet[temp.Base_node].Cost =  temp.Cost;
+
+              Packet[temp.Base_node].Seq_num = temp.Seq_num;
+
+              Packet[temp.Base_node].Age = temp.Age;
+
+              Packet[temp.Base_node].Node_Alive = 1;
+
+              Packet[temp.Base_node].Base_node = id;
+
+              Packet[temp.Base_node].Node_id = temp.Base_node;
+
+              flag = 0;
+
+              printf("\n Received Valid Packet....But Wont flood as this is the destination");
+
+          } else if (temp.Cost <= Packet[temp.Node_id].Cost) {
+
+              Packet[temp.Node_id].Cost = Packet[temp.Base_node].Cost + temp.Cost;
+
+              Packet[temp.Base_node].Seq_num = temp.Seq_num;
+
+              Packet[temp.Base_node].Age = temp.Age;
+
+              Packet[temp.Node_id].Node_Alive = 1;
+
+              Packet[temp.Node_id].Base_node = id;
+
+              Packet[temp.Node_id].Node_id = temp.Node_id;
+
+              flag = 1;
+
+              cnt = temp.Node_id;
+
+              printf("\n Received Valid Packet....will intiate flooding");
+
+          } else {
+
+              //Nothing!!!
+
+          }
+
+      } 
+
+
+}
+
+
+3) Create Child process:
+
+Now, Start Flooding the packet to all the neighbours except where it came from.
+
+Decrement the Sequence number
+Increment the Age.
+
+Now Send to all the neighbours
+
+                        sendto(cli_fd, (struct node *)&Packet[cnt], sizeof(Packet[cnt]), 0,
+
+                                        (struct sockaddr *)&Cli_addr, sizeof(Cli_addr));
+
+End of Child Process
+    
+Print the Routing Table!!!
+
+End of While Loop
+====================================================================
+
+Please go through my Code, I've written a lot of comments for each line for further understanding.
+
+
+
+3) TOPOLOGY:
+============
+
+
+My Topology is not full connected.
+
+
+
+
+5) INPUT FROM NODE 1 PERSPECTIVE
+================================
+
+
+kaushik@localhost:~/Network_project/temp$ ./node1.o  192.168.0.19  3161
+
+ Socket creation completed!!!
+
+ Socket creation completed!!!
+
+ Binding is Completed!!!
+
+ Node id for this node :1
+
+
+ First give server ip of this node then continue then next
+
+ ====User input for  :1 ---- 2  link =======
+
+ Is this link directly connected press [Y] or [N]Y
+
+
+ Give me the Neighbour ip address mate:192.168.0.19
+
+
+
+ Give me the Neighbour ip Port number mate:3162
+
+
+
+  Link cost : 3
+
+
+============DONE==================
+
+
+ Done with all the directed links....Please press -1 to terminate or press any number to continue:2
+
+
+
+ ====User input for  :1 ---- 3  link =======
+
+ Is this link directly connected press [Y] or [N]Y
+
+
+ Give me the Neighbour ip address mate:192.168.0.19
+
+
+ Give me the Neighbour ip Port number mate:3163
+
+
+  Link cost : 2
+
+
+============DONE==================
+
+
+ Done with all the directed links....Please press -1 to terminate or press any number to continue:2
+
+
+ ====User input for  :1 ---- 4  link =======
+
+ Is this link directly connected press [Y] or [N]N
+
+
+============DONE==================
+
+
+ Done with all the directed links....Please press -1 to terminate or press any number to continue:2
+
+
+ ====User input for  :1 ---- 5  link =======
+
+ Is this link directly connected press [Y] or [N]N
+
+
+
+============DONE==================
+
+
+
+ Done with all the directed links....Please press -1 to terminate or press any number to continue:2
+
+
+
+ ====User input for  :1 ---- 6  link =======
+
+ Is this link directly connected press [Y] or [N]N
+
+
+
+============DONE==================
+
+
+
+ Done with all the directed links....Please press -1 to terminate or press any number to continue:-1
+
+
+BELOW ARE THE SCREENSHOTS OF THE RESULTS!!!
+
+Excuted and ran all the 6 nodes on my machine as everyone of my friends are using windows machines. I'm only the one with a linux machine. So, Didn't had the chance to run it in different linux machines.
+
+
+6) MY PROJECT LIMITATIONS:
+User input is exhausting and should be given properly.
+Nodes cannot be added after network converges.
+
+
+
